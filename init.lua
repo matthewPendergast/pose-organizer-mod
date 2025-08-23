@@ -1,41 +1,48 @@
 ----------------------------------------------------------------
 -- PoseOrganizer
 -- Author: Matthew Pendergast
--- Brief: Organize & rename custom Photo Mode poses by category.
+-- Brief: Organize & rename custom photo mode poses by category.
 ----------------------------------------------------------------
 
--- Constants
-local MOD_NAME = "PoseOrganizer"
+-- Mod State --
 
--- Mod State
-local module = {
-	data = require("modules/data.lua")
-}
-
--- CET State
-local isOverlayVisible = false
-
--- Internal Data
-local poseCategories = {}
-local posesByCategory = {}
-local currPoseList = {}
-
--- ImGui
-local windowMinWidth = 300
-local windowMinHeight = 150
-local comboCategoryIndex = 0
-local lastCategoryIndex = -1
-local comboPoseIndex = 0
-
--- Localization
-local localizable = {
-	imgui = {
-		categoryLabel = "Category",
-		poseLabel = "Pose"
+local mod = {
+	data = require("modules/data.lua"),
+	interface = require("modules/interface.lua"),
+	localization = require("modules/localization.lua"),
+	utility = require("modules/utility.lua"),
+	debug = require("dev/debug.lua"),
+	state = {
+		isInterfaceInitialized = false
 	}
 }
 
--- Event Handlers
+-- CET State --
+
+local isOverlayVisible = false
+
+-- Internal Data --
+
+local poseCategories = {}
+local posesByCategory = {}
+local poseDataModel = {
+	categories = {},
+	poses = {}
+}
+
+-- Helper Functions --
+
+---@param error string
+local function handleError(error)
+	print(string.format("[%s] ", mod.localization.modName), error)
+end
+
+local function handleExportRequest()
+	mod.utility.exportPoseDataModel(poseDataModel)
+end
+
+-- Event Handlers --
+
 registerForEvent("onOverlayOpen", function()
 	isOverlayVisible = true
 end)
@@ -45,62 +52,59 @@ registerForEvent("onOverlayClose", function()
 end)
 
 registerForEvent("onInit", function()
-	local poseCategoryFlat = TweakDB:GetFlat(module.data.TweakDB.categoryFlat)
+	local poseCategoryFlat = TweakDB:GetFlat(mod.data.tweakDB.categoryFlat)
 	for _, category in ipairs(poseCategoryFlat) do
-		local localizedCategoryName = Game.GetLocalizedText(TweakDB:GetRecord(category):DisplayName().value)
-		table.insert(poseCategories, localizedCategoryName)
+		local categoryRecord = TweakDB:GetRecord(category)
+		local localizedCategoryName = Game.GetLocalizedText(categoryRecord:DisplayName().value)
+		table.insert(poseCategories, {
+			internalName = category,
+			displayName = localizedCategoryName
+		})
+		poseDataModel.categories[category] = localizedCategoryName
 	end
 
-	local poseFlat = TweakDB:GetFlat(module.data.TweakDB.poseFlat)
+	local poseFlat = TweakDB:GetFlat(mod.data.tweakDB.poseFlat)
 	for _, pose in ipairs(poseFlat) do
 		local poseRecord = TweakDB:GetRecord(pose)
-		local categoryRecord = TweakDB:GetRecord(poseRecord:Category().value)
-		local localizedCategoryName = Game.GetLocalizedText(categoryRecord:DisplayName().value)
-		local localizedPoseName = Game.GetLocalizedText(poseRecord:DisplayName().value)
+		if not poseRecord then
+			handleError(string.format("nil poseRecord for: %s", pose))
+		else
+			local poseCategory = poseRecord:Category().value
+			local categoryRecord = TweakDB:GetRecord(poseCategory)
+			if not categoryRecord then
+				handleError(string.format("nil categoryRecord for: %s", poseCategory))
+			else
+				local localizedPoseName = Game.GetLocalizedText(poseRecord:DisplayName().value)
 
-		if not posesByCategory[localizedCategoryName] then
-			posesByCategory[localizedCategoryName] = {}
+				if not posesByCategory[poseCategory] then
+					posesByCategory[poseCategory] = {}
+				end
+
+				table.insert(posesByCategory[poseCategory], {
+					internalName = pose,
+					displayName = localizedPoseName
+				})
+
+				poseDataModel.poses[pose] = {
+					category    = poseCategory,
+					displayName = localizedPoseName,
+				}
+			end
 		end
-
-		table.insert(posesByCategory[localizedCategoryName], {
-			id = pose,
-			displayName = localizedPoseName
-		})
 	end
+
+	mod.state.isInterfaceInitialized = mod.interface.initializeInterface(
+		mod.localization,
+		handleExportRequest
+	)
 end)
 
 registerForEvent("onDraw", function()
-	if not isOverlayVisible then
+	if not isOverlayVisible and not mod.state.isInterfaceInitialized then
 		return
-	end
-
-	ImGui.PushStyleVar(ImGuiStyleVar.WindowMinSize, windowMinWidth, windowMinHeight)
-
-	if not ImGui.Begin(MOD_NAME) then
-		ImGui.End()
-		return
-	end
-
-	ImGui.Separator()
-
-	-- Category Combo
-	comboCategoryIndex = ImGui.Combo(
-		localizable.imgui.categoryLabel, comboCategoryIndex, poseCategories, #poseCategories
-	)
-
-	if comboCategoryIndex ~= lastCategoryIndex then
-		local newCategory = poseCategories[comboCategoryIndex + 1]
-		local newPoses = posesByCategory[newCategory]
-		for index, pose in ipairs(newPoses) do
-			currPoseList[index] = pose.displayName
+	else
+		if mod.state.isInterfaceInitialized then
+			mod.interface.drawInterface(poseCategories, posesByCategory)
 		end
-		lastCategoryIndex = comboCategoryIndex
 	end
-
-	-- Pose Combo
-	comboPoseIndex = ImGui.Combo(
-		localizable.imgui.poseLabel, comboPoseIndex, currPoseList, #currPoseList
-	)
-
-	ImGui.End()
 end)
