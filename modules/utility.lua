@@ -1,7 +1,30 @@
-local path = "user-settings.json"
+-- Config --
+
+local USER_SETTINGS = "user-settings.json"
+local DATA_MODEL_PATH = "pose-data-model.json"
+
+-- Private Functions --
+
+local function mergeMap(existingMap, updatesMap)
+	if not updatesMap then
+		return
+	end
+	for ID, newEntry in pairs(updatesMap) do
+		local existingEntry = existingMap[ID]
+		if not existingEntry then
+			existingMap[ID] = newEntry
+		else
+			for k, v in pairs(newEntry) do
+				existingEntry[k] = v
+			end
+		end
+	end
+end
+
+-- Export Functions --
 
 local function loadUserSettings()
-	local file = io.open(path, "r")
+	local file = io.open(USER_SETTINGS, "r")
 	if not file then
 		return {
 			categories = {},
@@ -13,22 +36,6 @@ local function loadUserSettings()
 	return json.decode(contents)
 end
 
-local function mergeMap(existingMap, updatesMap)
-	if not updatesMap then
-		return
-	end
-	for id, newEntry in pairs(updatesMap) do
-		local existingEntry = existingMap[id]
-		if not existingEntry then
-			existingMap[id] = newEntry
-		else
-			for index, value in pairs(newEntry) do
-				existingEntry[index] = value
-			end
-		end
-	end
-end
-
 local function exportUserSettings(newSettings)
 	local currSettings = loadUserSettings()
 	currSettings.categories = currSettings.categories or {}
@@ -37,7 +44,7 @@ local function exportUserSettings(newSettings)
 	mergeMap(currSettings.categories, newSettings.categories)
 	mergeMap(currSettings.poses, newSettings.poses)
 
-	local file = io.open(path, "w")
+	local file = io.open(USER_SETTINGS, "w")
 	if not file then
 		return false
 	end
@@ -48,7 +55,7 @@ end
 
 local function exportPoseDataModel(poseDataModel)
 	local jsonText = json.encode(poseDataModel)
-	local file = io.open(path, "w")
+	local file = io.open(DATA_MODEL_PATH, "w")
 	if not file then
 		return false
 	end

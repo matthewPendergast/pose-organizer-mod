@@ -12,23 +12,24 @@ local inputPoseRename = ""
 -- UI Caches --
 
 local localization = {}
-local categoryNames, categoryIds = {}, {}
-local currPoseNames, currPoseIds = {}, {}
+local categoryNames, categoryIDs = {}, {}
+local currPoseNames, currPoseIDs = {}, {}
 
 -- Misc --
 
 local callbacks = {
-	requestExport = nil
+	handleRename = nil,
+	handleExportRequest = nil
 }
 
 -- Subviews --
 
 local function drawCategoryCombo(labels, poseCategories, posesByCategory)
 	-- Rebuild category arrays
-	categoryNames, categoryIds = {}, {}
+	categoryNames, categoryIDs = {}, {}
 	for i, category in ipairs(poseCategories) do
 		categoryNames[i] = category.displayName
-		categoryIds[i] = category.internalName
+		categoryIDs[i] = category.internalName
 	end
 
 	comboCategoryIndex = ImGui.Combo(
@@ -37,12 +38,12 @@ local function drawCategoryCombo(labels, poseCategories, posesByCategory)
 
 	-- Rebuild pose arrays if category changes
 	if comboCategoryIndex ~= lastCategoryIndex then
-		local newCategory = categoryIds[comboCategoryIndex + 1]
+		local newCategory = categoryIDs[comboCategoryIndex + 1]
 		local newPoses = posesByCategory[newCategory] or {}
-		currPoseNames, currPoseIds = {}, {}
-		for index, pose in ipairs(newPoses) do
-			currPoseNames[index] = pose.displayName
-			currPoseIds[index] = pose.internalName
+		currPoseNames, currPoseIDs = {}, {}
+		for i, pose in ipairs(newPoses) do
+			currPoseNames[i] = pose.displayName
+			currPoseIDs[i] = pose.internalName
 		end
 		comboPoseIndex = 0
 		lastCategoryIndex = comboCategoryIndex
@@ -76,9 +77,10 @@ end
 -- Export functions --
 
 ---@param localizationModule table
-local function initializeInterface(localizationModule, handleExportRequest)
+local function initializeInterface(localizationModule, handleRename, handleExportRequest)
 	localization = localizationModule
-	callbacks.requestExport = handleExportRequest
+	callbacks.handleRename = handleRename
+	callbacks.handleExportRequest = handleExportRequest
 	return true
 end
 
@@ -99,18 +101,38 @@ local function drawInterface(poseCategories, posesByCategory)
 
 	inputCategoryRename = ImGui.InputText("##CategoryRename", inputCategoryRename, 256)
 	ImGui.SameLine()
-	if ImGui.Button("Rename Category") then
-		--TODO
+	if ImGui.Button(localization.imgui.renameCategoryBtn) then
+		local selectedCategoryID = categoryIDs[comboCategoryIndex + 1]
+		local route = "category"
+		inputCategoryRename = callbacks.handleRename(
+			inputCategoryRename,
+			selectedCategoryID,
+			route,
+			function(newName)
+				categoryNames[comboCategoryIndex + 1] = newName
+			end
+		)
 	end
 
 	inputPoseRename = ImGui.InputText("##PoseRename", inputPoseRename, 256)
 	ImGui.SameLine()
-	if ImGui.Button("Rename Pose") then
-		--TODO
+	if ImGui.Button(localization.imgui.renamePoseBtn) then
+		local selectedPoseID = currPoseIDs[comboPoseIndex + 1]
+		local route = "pose"
+		inputPoseRename = callbacks.handleRename(
+			inputPoseRename,
+			selectedPoseID,
+			route,
+			function(newName)
+				if currPoseNames[comboPoseIndex + 1] then
+					currPoseNames[comboPoseIndex + 1] = newName
+				end
+			end
+		)
 	end
 
-	if ImGui.Button("Export") then
-		callbacks.requestExport()
+	if ImGui.Button("Export (development only)") then
+		callbacks.handleExportRequest()
 	end
 
 	closeInterface()
