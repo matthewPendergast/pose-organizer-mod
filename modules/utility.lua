@@ -1,6 +1,6 @@
 -- Config --
 
-local USER_SETTINGS = "user-settings.json"
+local USER_SETTINGS_PATH = "user-settings.json"
 local DATA_MODEL_PATH = "pose-data-model.json"
 
 -- Private Functions --
@@ -24,7 +24,7 @@ end
 -- Export Functions --
 
 local function loadUserSettings()
-	local file = io.open(USER_SETTINGS, "r")
+	local file = io.open(USER_SETTINGS_PATH, "r")
 	if not file then
 		return {
 			categories = {},
@@ -44,7 +44,7 @@ local function exportUserSettings(newSettings)
 	mergeMap(currSettings.categories, newSettings.categories)
 	mergeMap(currSettings.poses, newSettings.poses)
 
-	local file = io.open(USER_SETTINGS, "w")
+	local file = io.open(USER_SETTINGS_PATH, "w")
 	if not file then
 		return false
 	end

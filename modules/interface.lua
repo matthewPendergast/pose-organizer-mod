@@ -1,8 +1,10 @@
 -- Config --
+
 local windowMinWidth = 300
 local windowMinHeight = 150
 
 -- State --
+
 local comboCategoryIndex = 0
 local lastCategoryIndex = -1
 local comboPoseIndex = 0
