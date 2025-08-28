@@ -1,5 +1,5 @@
 ----------------------------------------------------------------
--- PoseOrganizer
+-- Pose Organizer
 -- Author: Matthew Pendergast
 -- Brief: Organize & rename custom photo mode poses by category
 ----------------------------------------------------------------
@@ -29,16 +29,11 @@ local poseDataModel = {
 	categories = {},
 	poses = {}
 }
-local categoryBucketsTemplate = nil
+local lastCategoryID = nil
+local categoryGroupsTemplate = nil
 local sessionCategoryMap = nil
-
--- Reference --
-local menuController = {
-	attribute = {
-		category = 5,
-		pose = 6,
-	}
-}
+local poseGroupsTemplate = nil
+local sessionPoseMap = nil
 
 -- Helper Functions --
 
@@ -203,8 +198,7 @@ end
 local function initializeInternalData()
 	buildCategories()
 	buildPoses()
-	local overrides = mod.utility.loadUserSettings()
-	applyUserOverrides(overrides)
+	applyUserOverrides(mod.utility.loadUserSettings())
 end
 
 -- Event Handlers --
@@ -226,6 +220,18 @@ registerForEvent("onInit", function()
 		handleExportRequest
 	)
 
+	Observe("gameuiPhotoModeMenuController", "OnAttributeUpdated",
+		---@param this gameuiPhotoModeMenuController
+		---@param attributeKey Uint32
+		---@param attributeValue Float
+		---@param doApply? Bool
+		function(this, attributeKey, attributeValue, doApply)
+			if attributeKey == mod.data.menuController.attribute.category and sessionCategoryMap then
+				-- Track selected Category when changed
+				lastCategoryID = sessionCategoryMap[attributeValue + 1]
+			end
+		end)
+
 	Override("gameuiPhotoModeMenuController", "OnSetupOptionSelector",
 		---@param this gameuiPhotoModeMenuController
 		---@param attribute Uint32
@@ -235,59 +241,132 @@ registerForEvent("onInit", function()
 		---@param wrappedMethod function
 		---@return Bool
 		function(this, attribute, values, startData, doApply, wrappedMethod)
-			if not values or #values == 0 then
-				return wrappedMethod(attribute, values, startData, doApply)
-			end
-
-			-- Modify Category values
-			if attribute == menuController.attribute.category then
-				-- Setup category bucket template
-				if not categoryBucketsTemplate then
-					categoryBucketsTemplate = {}
+			-- Category OptionSelector --
+			if attribute == mod.data.menuController.attribute.category then
+				-- Initial setup for category groups template
+				if not categoryGroupsTemplate then
+					categoryGroupsTemplate = {}
 					for _, category in ipairs(poseCategories) do
 						local id = category.internalName
 						local record = TweakDB:GetRecord(id)
 						if record then
 							local originalName = Game.GetLocalizedText(record:DisplayName().value)
-							local list = categoryBucketsTemplate[originalName]
+							local list = categoryGroupsTemplate[originalName]
 							if not list then
 								list = {}
-								categoryBucketsTemplate[originalName] = list
+								categoryGroupsTemplate[originalName] = list
 							end
 							list[#list + 1] = id
 						end
 					end
 				end
-
-				-- Make working copy of the buckets (prevents mutation of template)
-				local buckets = {}
-				for k, v in pairs(categoryBucketsTemplate) do
+				-- Make working copy of the category groups template to avoid mutating template
+				local categoryGroups = {}
+				for k, v in pairs(categoryGroupsTemplate) do
 					local copy = {}
-					for i = 1, #v do copy[i] = v[i] end
-					buckets[k] = copy
+					for i = 1, #v do
+						copy[i] = v[i]
+					end
+					categoryGroups[k] = copy
 				end
-
-				-- Map the UI values in order to IDs
+				-- Map UI values to IDs for referencing changes
 				sessionCategoryMap = {}
 				for i = 1, #values do
-					local option = values[i].optionText
-					local key = Game.GetLocalizedText(option)
-					local ids = buckets[key]
+					local key = values[i].optionText
+					local ids = categoryGroups[key]
 					if ids and #ids > 0 then
 						sessionCategoryMap[i] = table.remove(ids, 1)
 					else
 						handleError(("Unresolved Category label: %s at index %d"):format(key or "<nil>", i))
 					end
 				end
-
-				-- Apply user overrides to values
+				-- Apply user overrides to in-game UI display values
 				local overrides = mod.utility.loadUserSettings() or {}
 				local categoryOverrides = overrides.categories or {}
 				for i = 1, #values do
-					local id = sessionCategoryMap and sessionCategoryMap[i]
+					local id = nil
+					if sessionCategoryMap then
+						id = sessionCategoryMap[i]
+					end
 					if id then
 						local override = categoryOverrides[id]
-						local name = override and override.customName and trim(override.customName)
+						local name = nil
+						if override and override.customName then
+							name = trim(override.customName)
+						end
+						if name and name ~= "" then
+							values[i].optionText = name
+						end
+					end
+				end
+			end
+
+			-- Pose OptionSelector --
+			if attribute == mod.data.menuController.attribute.pose then
+				local activeCategoryID = lastCategoryID
+				if not activeCategoryID then
+					if sessionCategoryMap then
+						activeCategoryID = sessionCategoryMap[1]
+					else
+						return wrappedMethod(attribute, values, startData, doApply)
+					end
+				end
+				-- Initial setup for pose groups template
+				if not poseGroupsTemplate then
+					poseGroupsTemplate = {}
+				end
+				if not poseGroupsTemplate[activeCategoryID] then
+					local poseMap = {}
+					local list = posesByCategory[activeCategoryID] or {}
+					for _, pose in ipairs(list) do
+						local id = pose.internalName
+						local record = TweakDB:GetRecord(id)
+						if record then
+							local originalName = Game.GetLocalizedText(record:DisplayName().value)
+							local list = poseMap[originalName]
+							if not list then
+								list = {}
+								poseMap[originalName] = list
+							end
+							list[#list + 1] = id
+						end
+					end
+					poseGroupsTemplate[activeCategoryID] = poseMap
+				end
+				-- Make working copy of the pose groups template to avoid mutating template
+				local poseGroups = {}
+				for k, v in pairs(poseGroupsTemplate[activeCategoryID]) do
+					local copy = {}
+					for i = 1, #v do
+						copy[i] = v[i]
+					end
+					poseGroups[k] = copy
+				end
+				-- Map UI values to IDs for referencing changes
+				sessionPoseMap = {}
+				for i = 1, #values do
+					local key = values[i].optionText
+					local ids = poseGroups[key]
+					if ids and #ids > 0 then
+						sessionPoseMap[i] = table.remove(ids, 1)
+					else
+						handleError(("Unresolved Pose label: %s at index %d"):format(key or "<nil>", i))
+					end
+				end
+				-- Apply user overrides to in-game UI display values
+				local overrides = mod.utility.loadUserSettings() or {}
+				local poseOverrides = overrides.poses or {}
+				for i = 1, #values do
+					local id = nil
+					if sessionPoseMap then
+						id = sessionPoseMap[i]
+					end
+					if id then
+						local override = poseOverrides[id]
+						local name = nil
+						if override and override.customName then
+							name = trim(override.customName)
+						end
 						if name and name ~= "" then
 							values[i].optionText = name
 						end
