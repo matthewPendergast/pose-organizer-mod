@@ -1,0 +1,11 @@
+{
+	"$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json",
+	"Lua.runtime.version": "Lua 5.4",
+	"Lua.workspace.checkThirdParty": false,
+	"Lua.workspace.library": ["./types"],
+	"Lua.diagnostics.globals": [
+		"Game", "TweakDB", "ImGui",
+		"Override", "Observe", "ObserveAfter",
+		"registerForEvent", "GetMod", "RegisterInput"
+	]
+}

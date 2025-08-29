@@ -1,5 +1,5 @@
-*.json
 *.log
 *.sqlite3
 /dev
+/user
 data.lua

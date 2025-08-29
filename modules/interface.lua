@@ -1,7 +1,10 @@
+local Interface = {}
+
 -- Config --
 
-local windowMinWidth = 300
-local windowMinHeight = 150
+local WINDOW_MIN_WIDTH = 400
+local WINDOW_MIN_HEIGHT = 200
+local TEXT_INPUT_LIMIT = 256
 
 -- State --
 
@@ -10,8 +13,9 @@ local lastCategoryIndex = -1
 local comboPoseIndex = 0
 local inputCategoryRename = ""
 local inputPoseRename = ""
+local isDebugActive = false
 
--- UI Caches --
+-- Caches --
 
 local localization = {}
 local categoryNames, categoryIDs = {}, {}
@@ -20,12 +24,16 @@ local currPoseNames, currPoseIDs = {}, {}
 -- Misc --
 
 local callbacks = {
-	handleRename = nil,
+	handleCategoryRename = nil,
+	handlePoseRename = nil,
 	handleExportRequest = nil
 }
 
 -- Subviews --
 
+---@param labels table
+---@param poseCategories table
+---@param posesByCategory table
 local function drawCategoryCombo(labels, poseCategories, posesByCategory)
 	-- Rebuild category arrays
 	categoryNames, categoryIDs = {}, {}
@@ -52,6 +60,7 @@ local function drawCategoryCombo(labels, poseCategories, posesByCategory)
 	end
 end
 
+---@param labels table
 local function drawPoseCombo(labels)
 	local isComboDisabled = #currPoseNames <= 0
 	if isComboDisabled then
@@ -69,25 +78,29 @@ local function drawPoseCombo(labels)
 	end
 end
 
--- Interface controls --
+-- Interface Controls --
 
 local function closeInterface()
 	ImGui.End()
 	ImGui.PopStyleVar()
 end
 
--- Export functions --
+-- Module Functions --
 
----@param localizationModule table
-local function initializeInterface(localizationModule, handleRename, handleExportRequest)
-	localization = localizationModule
-	callbacks.handleRename = handleRename
-	callbacks.handleExportRequest = handleExportRequest
+---@param context table
+function Interface.init(context)
+	localization = context.localization
+	callbacks.handleCategoryRename = context.handleCategoryRename
+	callbacks.handlePoseRename = context.handlePoseRename
+	callbacks.handleExportRequest = context.handleExportRequest
+	isDebugActive = context.isDebugActive
 	return true
 end
 
-local function drawInterface(poseCategories, posesByCategory)
-	ImGui.PushStyleVar(ImGuiStyleVar.WindowMinSize, windowMinWidth, windowMinHeight)
+---@param poseCategories table
+---@param posesByCategory table
+function Interface.draw(poseCategories, posesByCategory)
+	ImGui.PushStyleVar(ImGuiStyleVar.WindowMinSize, WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT)
 
 	if not ImGui.Begin(localization.modName) then
 		closeInterface()
@@ -101,46 +114,39 @@ local function drawInterface(poseCategories, posesByCategory)
 
 	ImGui.Separator()
 
-	inputCategoryRename = ImGui.InputText("##CategoryRename", inputCategoryRename, 256)
+	inputCategoryRename = ImGui.InputText("##CategoryRename", inputCategoryRename, TEXT_INPUT_LIMIT)
 	ImGui.SameLine()
 	if ImGui.Button(localization.imgui.renameCategoryBtn) then
 		local selectedCategoryID = categoryIDs[comboCategoryIndex + 1]
-		local route = "category"
-		inputCategoryRename = callbacks.handleRename(
-			inputCategoryRename,
-			selectedCategoryID,
-			route,
-			function(newName)
-				categoryNames[comboCategoryIndex + 1] = newName
-			end
-		)
+		local newName = (inputCategoryRename or ""):gsub("^%s+", ""):gsub("%s+$", "")
+		if newName ~= "" and selectedCategoryID and callbacks.handleCategoryRename then
+			callbacks.handleCategoryRename(selectedCategoryID, newName)
+			categoryNames[comboCategoryIndex + 1] = newName
+			inputCategoryRename = ""
+		end
 	end
 
-	inputPoseRename = ImGui.InputText("##PoseRename", inputPoseRename, 256)
+	inputPoseRename = ImGui.InputText("##PoseRename", inputPoseRename, TEXT_INPUT_LIMIT)
 	ImGui.SameLine()
 	if ImGui.Button(localization.imgui.renamePoseBtn) then
 		local selectedPoseID = currPoseIDs[comboPoseIndex + 1]
-		local route = "pose"
-		inputPoseRename = callbacks.handleRename(
-			inputPoseRename,
-			selectedPoseID,
-			route,
-			function(newName)
-				if currPoseNames[comboPoseIndex + 1] then
-					currPoseNames[comboPoseIndex + 1] = newName
-				end
+		local newName = (inputPoseRename or ""):gsub("^%s+", ""):gsub("%s+$", "")
+		if newName ~= "" and selectedPoseID and callbacks.handlePoseRename then
+			callbacks.handlePoseRename(selectedPoseID, newName)
+			if currPoseNames[comboPoseIndex + 1] then
+				currPoseNames[comboPoseIndex + 1] = newName
 			end
-		)
+			inputPoseRename = ""
+		end
 	end
 
-	if ImGui.Button("Export (development only)") then
-		callbacks.handleExportRequest()
+	if isDebugActive then
+		if ImGui.Button("Export Model") then
+			callbacks.handleExportRequest()
+		end
 	end
 
 	closeInterface()
 end
 
-return {
-	initializeInterface = initializeInterface,
-	drawInterface = drawInterface
-}
+return Interface

@@ -1,5 +1,5 @@
 return {
-	modName = "PoseOrganizer",
+	modName = "Pose Organizer",
 	imgui = {
 		categoryLabel = "Category",
 		poseLabel = "Pose",

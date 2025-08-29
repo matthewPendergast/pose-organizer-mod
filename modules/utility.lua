@@ -1,10 +1,14 @@
+local Utility = {}
+
 -- Config --
 
-local USER_SETTINGS_PATH = "user-settings.json"
-local DATA_MODEL_PATH = "pose-data-model.json"
+local USER_OVERRIDES_PATH = "user/user-overrides.json"
+local DATA_MODEL_PATH = "user/pose-data-model.json"
 
--- Private Functions --
+-- Local Functions --
 
+---@param existingMap table
+---@param updatesMap table
 local function mergeMap(existingMap, updatesMap)
 	if not updatesMap then
 		return
@@ -21,10 +25,10 @@ local function mergeMap(existingMap, updatesMap)
 	end
 end
 
--- Export Functions --
+-- Module Functions --
 
-local function loadUserSettings()
-	local file = io.open(USER_SETTINGS_PATH, "r")
+function Utility.loadUserSettings()
+	local file = io.open(USER_OVERRIDES_PATH, "r")
 	if not file then
 		return {
 			categories = {},
@@ -36,15 +40,16 @@ local function loadUserSettings()
 	return json.decode(contents)
 end
 
-local function exportUserSettings(newSettings)
-	local currSettings = loadUserSettings()
+---@param newSettings table
+function Utility.exportUserSettings(newSettings)
+	local currSettings = Utility.loadUserSettings()
 	currSettings.categories = currSettings.categories or {}
 	currSettings.poses = currSettings.poses or {}
 
 	mergeMap(currSettings.categories, newSettings.categories)
 	mergeMap(currSettings.poses, newSettings.poses)
 
-	local file = io.open(USER_SETTINGS_PATH, "w")
+	local file = io.open(USER_OVERRIDES_PATH, "w")
 	if not file then
 		return false
 	end
@@ -53,7 +58,8 @@ local function exportUserSettings(newSettings)
 	return true
 end
 
-local function exportPoseDataModel(poseDataModel)
+---@param poseDataModel table
+function Utility.exportPoseDataModel(poseDataModel)
 	local jsonText = json.encode(poseDataModel)
 	local file = io.open(DATA_MODEL_PATH, "w")
 	if not file then
@@ -64,8 +70,4 @@ local function exportPoseDataModel(poseDataModel)
 	return true
 end
 
-return {
-	loadUserSettings = loadUserSettings,
-	exportUserSettings = exportUserSettings,
-	exportPoseDataModel = exportPoseDataModel,
-}
+return Utility
