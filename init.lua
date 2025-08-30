@@ -65,7 +65,7 @@ local function init()
 		posesByCategory = posesByCategory,
 		controller = mod.controller,
 		handleError = handleError,
-		debugMode = mod.state.isDebugActive,
+		isDebugActive = mod.state.isDebugActive,
 	})
 
 	-- Initialize interface
@@ -73,8 +73,9 @@ local function init()
 		localization = mod.localization,
 		handleCategoryRename = mod.controller.handleCategoryRename,
 		handlePoseRename = mod.controller.handlePoseRename,
+		handlePoseReassign = mod.controller.handlePoseReassign,
 		handleExportRequest = mod.controller.handleExportRequest,
-		debugMode = mod.state.isDebugActive
+		isDebugActive = mod.state.isDebugActive
 	})
 end
 
@@ -87,6 +88,11 @@ end)
 registerForEvent("onOverlayClose", function()
 	isOverlayVisible = false
 end)
+
+registerForEvent("onTweak", function()
+	mod.controller.applyAllPoseCategoryPatches(mod.utility.loadUserSettings())
+end)
+
 
 registerForEvent("onInit", function()
 	init()
@@ -128,7 +134,7 @@ registerForEvent("onDraw", function()
 		return
 	else
 		if mod.state.isInterfaceInitialized then
-			mod.interface.draw(poseCategories, posesByCategory)
+			mod.interface.draw(poseCategories, mod.controller.getUIPoseMap())
 		end
 	end
 end)

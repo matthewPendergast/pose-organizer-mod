@@ -53,8 +53,13 @@ function ObserveAfter(class, method, cb) end
 function Game.GetLocalizedText(textKey) end
 
 ---@param path string
----@return any[]
+---@return any
 function TweakDB:GetFlat(path) end
+
+---@param path string
+---@param newValue any
+---@return boolean
+function TweakDB:SetFlat(path, newValue) end
 
 ---@param path string
 ---@return any

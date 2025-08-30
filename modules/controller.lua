@@ -11,6 +11,14 @@ local overridesCache = {
 	poses = {}
 }
 
+-- Helper Functions --
+
+local function ensureOverridesShape()
+	overridesCache = overridesCache or {}
+	overridesCache.categories = overridesCache.categories or {}
+	overridesCache.poses = overridesCache.poses or {}
+end
+
 -- Module Functions --
 
 ---@param context table
@@ -20,6 +28,28 @@ function Controller.init(context)
 	poseDataModel = context.poseDataModel
 	utility = context.utility
 	overridesCache = context.utility.loadUserSettings()
+	ensureOverridesShape()
+end
+
+function Controller.getUIPoseMap()
+	local map = {}
+
+	for categoryID, _list in pairs(posesByCategory) do
+		map[categoryID] = {}
+	end
+
+	for categoryID, list in pairs(posesByCategory) do
+		for _, entry in ipairs(list) do
+			local poseID = entry.internalName
+			local override = overridesCache.poses[poseID]
+			local targetCategory = (override and override.newCategory) or
+				(poseDataModel.poses[poseID] and poseDataModel.poses[poseID].category) or categoryID
+			map[targetCategory] = map[targetCategory] or {}
+			table.insert(map[targetCategory], entry)
+		end
+	end
+
+	return map
 end
 
 function Controller.getOverrides()
@@ -29,7 +59,8 @@ end
 ---@param overrides table
 function Controller.applyUserOverrides(overrides)
 	overridesCache = overrides
-	for categoryID, entry in pairs(overrides.categories or {}) do
+	ensureOverridesShape()
+	for categoryID, entry in pairs(overrides.categories) do
 		if entry and entry.customName then
 			if poseDataModel.categories[categoryID] then
 				for _, category in ipairs(poseCategories) do
@@ -42,20 +73,54 @@ function Controller.applyUserOverrides(overrides)
 		end
 	end
 
-	for poseID, entry in pairs(overrides.poses or {}) do
+	for poseID, entry in pairs(overrides.poses) do
 		local info = poseDataModel.poses[poseID]
-		if info and entry and entry.customName then
-			info.displayName = entry.customName
-			local categoryID = info.category
-			local list = posesByCategory[categoryID]
-			if list then
-				for _, pose in ipairs(list) do
-					if pose.internalName == poseID then
-						pose.displayName = entry.customName
-						break
+		if info then
+			if entry.customName then
+				info.displayName = entry.customName
+				local list = posesByCategory[info.category]
+				if list then
+					for _, pose in ipairs(list) do
+						if pose.internalName == poseID then
+							pose.displayName = entry.customName
+							break
+						end
 					end
 				end
 			end
+			if entry.newCategory and entry.newCategory ~= "" then
+				info.category = entry.newCategory
+			end
+		end
+	end
+end
+
+---@param poseID string
+---@param categoryID string
+function Controller.applyPoseCategoryPatch(poseID, categoryID)
+	if not poseID or not categoryID or categoryID == "" then
+		return false
+	end
+
+	local poseRec = poseID:find("^PhotoModePoses%.") and poseID or ("PhotoModePoses." .. poseID)
+	local categoryRec = categoryID:find("^PhotoModePoseCategories%.") and categoryID or
+		("PhotoModePoseCategories." .. categoryID)
+
+	local flatPath = poseRec .. ".category"
+	local ok = TweakDB:SetFlat(flatPath, categoryRec)
+
+	return ok
+end
+
+---@param overridesOpt table
+function Controller.applyAllPoseCategoryPatches(overridesOpt)
+	local srcPoses = (overridesOpt and overridesOpt.poses) or overridesCache.poses
+	if not srcPoses then return end
+
+	for poseID, entry in pairs(srcPoses) do
+		local category = entry and entry.newCategory
+		if category and category ~= "" then
+			Controller.applyPoseCategoryPatch(poseID, category)
 		end
 	end
 end
@@ -69,6 +134,8 @@ function Controller.handleCategoryRename(selectedCategoryID, newDisplayName)
 		}
 	})
 
+	poseDataModel.categories[selectedCategoryID] = newDisplayName
+
 	for _, entry in ipairs(poseCategories) do
 		if entry.internalName == selectedCategoryID then
 			entry.displayName = newDisplayName
@@ -79,8 +146,6 @@ function Controller.handleCategoryRename(selectedCategoryID, newDisplayName)
 	overridesCache.categories[selectedCategoryID] = {
 		customName = newDisplayName
 	}
-
-	poseDataModel.categories[selectedCategoryID] = newDisplayName
 end
 
 ---@param selectedPoseID string
@@ -92,23 +157,39 @@ function Controller.handlePoseRename(selectedPoseID, newDisplayName)
 		}
 	})
 
+	local pose = overridesCache.poses[selectedPoseID] or {}
+	pose.customName = newDisplayName
+	overridesCache.poses[selectedPoseID] = pose
+
 	local info = poseDataModel.poses[selectedPoseID]
 	if info then
 		info.displayName = newDisplayName
-		local list = posesByCategory[info.category]
-		if list then
+		for _, list in pairs(posesByCategory) do
 			for _, entry in ipairs(list) do
 				if entry.internalName == selectedPoseID then
 					entry.displayName = newDisplayName
-					break
 				end
 			end
 		end
 	end
+end
 
-	overridesCache.poses[selectedPoseID] = {
-		customName = newDisplayName
-	}
+---@param selectedPoseID string
+---@param newCategoryID string
+function Controller.handlePoseReassign(selectedPoseID, newCategoryID)
+	if not selectedPoseID or not newCategoryID then return end
+
+	utility.exportUserSettings({
+		poses = { [selectedPoseID] = { newCategory = newCategoryID } }
+	})
+	overridesCache.poses[selectedPoseID] = overridesCache.poses[selectedPoseID] or {}
+	overridesCache.poses[selectedPoseID].newCategory = newCategoryID
+
+	if poseDataModel.poses[selectedPoseID] then
+		poseDataModel.poses[selectedPoseID].category = newCategoryID
+	end
+
+	Controller.applyPoseCategoryPatch(selectedPoseID, newCategoryID)
 end
 
 function Controller.handleExportRequest()

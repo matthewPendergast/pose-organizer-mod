@@ -13,10 +13,10 @@ local function mergeMap(existingMap, updatesMap)
 	if not updatesMap then
 		return
 	end
-	for ID, newEntry in pairs(updatesMap) do
-		local existingEntry = existingMap[ID]
+	for id, newEntry in pairs(updatesMap) do
+		local existingEntry = existingMap[id]
 		if not existingEntry then
-			existingMap[ID] = newEntry
+			existingMap[id] = newEntry
 		else
 			for k, v in pairs(newEntry) do
 				existingEntry[k] = v
